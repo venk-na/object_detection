@@ -1,3 +1,4 @@
+
 # Object Detection in an Urban Environment
 
 ## Data
@@ -138,23 +139,191 @@ Finally, you can create a video of your model's inferences for any tf record fil
 python inference_video.py --labelmap_path label_map.pbtxt --model_path experiments/reference/exported/saved_model --tf_record_path /data/waymo/testing/segment-12200383401366682847_2552_140_2572_140_with_camera_labels.tfrecord --config_path experiments/reference/pipeline_new.config --output_path animation.gif
 ```
 
-## Submission Template
+## Project writeup
 
-### Project overview
-This section should contain a brief description of the project and what we are trying to achieve. Why is object detection such an important component of self driving car systems?
+### Overview
+This project involves development of an object detection model based on the convolutional neural network for autonomous driving system. The architecture of this model is  **SSD Resnet50**.  Dataset used in this project is Waymo Open Dataset, which includes various scenes of urban environments consisting vehicles, pedestrians and cyclists. The model is trained on the tensorflow object detection API to detect and classify vehicles, pedestrians and cyclists.
+
+Perception is the fundamental step in the autonomous driving system pipeline. Just like visual system is for humans, perception and vision related algorithms are for computers to detect and classify objects on the road and support self_driving car to make a correct decision on its own.
 
 ### Set up
-This section should contain a brief description of the steps to follow to run the code for this repository.
+GPU compatible system is necessary for this
+
+   * First the project files should be downloaded through git clone from [this](https://github.com/udacity/nd013-c1-vision-starter) repository
+   * Navigate to the root directory of the project and use the docker file and requirements.txt from the "build" directory
+   * The following command should be run from inside the "build" directory:
+    ``` docker build -t project-dev -f Dockerfile .```
+   * Then we create a docker container to run the created image.
+    ``` 
+    docker run --gpus all -v <PATH TO LOCAL PROJECT FOLDER>:/app/project/ --network=host -ti project-dev bash
+   ```
+   * Inside the container, we can use the gsutil command to download the tfrecord from cloud storage:
+    ``` 
+    curl https://sdk.cloud.google.com | bash
+   ```
+   -Authentication can be done using
+   ```
+    pip install tensorflow-gpu==2.3.0
+    pip install numpy
+    pip install pandas
+    pip install matplotlib
+    pip install seaborn 
+   ```
+To run the code in this repository:
+
+  - `step1`: **Exploratory data analysis**
+  ```
+  jupyter notebook --port 3002 --ip=0.0.0.0 --allow-root
+  ```
+
+  - `step2`: **create a split for train and val in waymo**
+  ```
+  python create_splits.py --data-dir /home/workspace/data/waymo
+  ```
+
+  - `step3`: **edit the config file**
+  ```
+  python edit_config.py --train_dir /home/workspace/data/waymo/train/ --eval_dir /home/workspace/data/waymo/val/ --batch_size 2 --checkpoint /home/workspace/experiments/pretrained_model/ssd_resnet50_v1_fpn_640x640_coco17_tpu-8/checkpoint/ckpt-0 --label_map /home/workspace/experiments/label_map.pbtxt
+  ```
+
+  - `step4`: **train and validation the model**
+
+    - _train process_
+    ```
+    python experiments/model_main_tf2.py --model_dir=experiments/reference/ --pipeline_config_path=experiments/reference/pipeline_new.config
+    ```
+
+    - _validation process_
+    ```
+    python experiments/model_main_tf2.py --model_dir=experiments/reference/ --pipeline_config_path=experiments/reference/pipeline_new.config --checkpoint_dir=experiments/reference/
+    ```
+
+  - `step5`: **export the trained model**(Final model in experiment4)
 
 ### Dataset
 #### Dataset analysis
-This section should contain a quantitative and qualitative description of the dataset. It should include images, charts and other visualizations.
+- We can observe that some images have a good resolution, some images are blurry due to the weather condition and some images are dark. Vehicles are in red bounding boxes, pedestrians are in green bounding boxes, cyclists are in blue bounding boxes.
+
+   <div align=center>
+      <img src="./images/Image_plot.png" width="800"/>
+   </div>
+
+  - From the bar chart below, we could observe that the dataset we've downloaded has a large number of vehicles and pedestrains, but very limited number of cyclists.
+   
+   <div align=center>
+      <img src="./images/Class_distribution.png" width="800"/>
+   </div>
 #### Cross validation
-This section should detail the cross validation strategy and justify your approach.
+By using 100 tfrecord, we use [sklearn.model_selection.train_test_split](https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.train_test_split.html) shuffle data by default=True to generalize data and create three splits from the processed records into train, val and test to reduce the imbalance class in each sample. Since we only use 100 tfrecords, we split the train data to 60 tfrecords and 20 tfrecords for test and validate dataset to ensure we have enough data for training and enough data for test and validate.
 
 ### Training
 #### Reference experiment
-This section should detail the results of the reference experiment. It should includes training metrics and a detailed explanation of the algorithm's performances.
+The reference experiment uses the `ssd_resnet50_v1_fpn_640x640_coco17_tpu-8` pretrained model as a baseline and uses the default training parameters in the `pipeline.config`.
+- The batch size is 4 in the SSD Resnet 50 640x640 baseline model, training steps up to 3200 in the Udacity workspace.
+- Sometimes it is unable to run train and eval commands at the same time. Udacity workspace will throw out of memory (OOM).  As a result, this cause eval to have only 1 blue dot. Running eval command after training finished. The error persists even for a smaller batch size of 2. 
 
+The following plots shows various metrics and figures obtained with training using reference experiment. 
+#### Loss
+![loss](images/loss.png)
+
+#### Precision
+![precision](images/precision.png)
+#### Recall
+![recall](images/recall.png)
+#### Learning Rate
+![LR](images/learningRate.png)
+#### Evaluation  
+![eval](images/evalResults.png)
+  
 #### Improve on the reference
-This section should highlight the different strategies you adopted to improve your model. It should contain relevant figures and details of your findings.
+We use `Explore augmentations2.ipynb` tried different data augmentation combinations to optimal for our dataset. The changed parameters are stored in the new config file in `/experiments/improved/performance_improve.config`.  
+
+In this section We applied the following Augmentations from [preprocessor.proto](https://github.com/tensorflow/models/blob/master/research/object_detection/protos/preprocessor.proto)
+such as add a random RGB to gray transform with a probability of 0.2:
+```
+data_augmentation_options {
+    random_rgb_to_gray {
+    probability: 0.2
+    }
+  }
+```
+- Add random_pixel_value_scale and random_image_scale to default value.
+```
+  data_augmentation_options {
+    random_pixel_value_scale {
+    }
+  }
+  data_augmentation_options {
+    random_image_scale {
+    }
+  }
+```
+- Brightness adjusted to 0.3  
+```
+  data_augmentation_options {
+    random_adjust_brightness {
+    max_delta: 0.3
+    }
+  }
+```
+- Add random_adjust_hue, random_adjust_contrast and random_adjust_saturation to default value. 
+```
+ data_augmentation_options {
+   random_adjust_hue {
+   }
+ }
+ data_augmentation_options {
+   random_adjust_contrast {
+   }
+ }
+ data_augmentation_options {
+   random_adjust_saturation {
+   }
+ }
+```
+-  Add a random contrast values between 0.6 ~ 1.0   
+```
+  data_augmentation_options {
+    random_adjust_contrast {
+    min_delta: 0.6
+    max_delta: 1.0
+    }
+  }
+```
+
+- Add random_jpeg_quality with min_jpeg_quality to 80
+```
+data_augmentation_options {
+    random_jpeg_quality {
+      min_jpeg_quality: 80
+    }
+  }
+```
+![aug1](images/aug1.png)
+![aug2](images/aug2.png)
+![aug3](images/aug3.png)
+![aug4](images/aug4.png)
+
+- Only adjust random_rgb_to_gray, random_adjust_brightness and contrast  
+```
+  data_augmentation_options {
+    random_rgb_to_gray {
+    probability: 0.2
+    }
+  }
+  data_augmentation_options {
+    random_adjust_brightness {
+    max_delta: 0.3
+    }
+  }
+  data_augmentation_options {
+    random_adjust_contrast {
+    min_delta: 0.6
+    max_delta: 1.0
+    }
+  }
+```  
+![aug5](images/aug5.png)
+![aug6](images/aug6.png)
+![aug7](images/aug7.png)
+![aug8](images/aug8.png)
