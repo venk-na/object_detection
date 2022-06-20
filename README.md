@@ -1,4 +1,5 @@
 
+
 # Object Detection in an Urban Environment
 
 ## Data
@@ -327,3 +328,31 @@ data_augmentation_options {
 ![aug6](images/aug6.png)
 ![aug7](images/aug7.png)
 ![aug8](images/aug8.png)
+
+- **Experiment2** 
+  
+    - Model: **`ssd_resnet50_v1_fpn_640x640_coco17_tpu-8`**
+    - Pipeline: [here](./experiments/experiment2/pipeline_new.config) 
+  
+    **Main changes**:
+    ```
+      1. Try different data_augmentation
+         * random_adjust_brightness
+         * random_rgb_to_gray
+      2. Change optimizer: momentum --> adam
+      3. Change learning rate: cosine_decay, base(0.04) --> Manual_step, base(0.002)
+      4. Increase training_step to 25K
+     ```
+    
+    Try different data_augmentation combination, different optimizer and learning rate, to see what effects will have. From the result, seems not much help with these changes.
+  
+    ***Results displayed on the tensorboard***:
+
+    #### Loss
+    ![experLoss](images/ExpLoss.png)
+    #### Precision
+    ![experprecision](images/ExpPrecision.png)
+    #### Recall
+    ![experRecall](images/ExpRecall.png)
+    #### Learning_rate 
+   ![experLR](images/ExpLR.png)
